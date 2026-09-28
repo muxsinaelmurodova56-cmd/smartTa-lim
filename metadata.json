@@ -1,0 +1,7 @@
+{
+  "name": "Dars45 - Raqamli Ta'lim Platformasi",
+  "description": "O'qituvchi va o'quvchilar uchun 45 daqiqalik darslarni to'liq raqamli formatda rejalashtirish, olib borish va baholash platformasi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
