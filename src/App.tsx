@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { defaultLessons } from './data/defaultLessons';
 import { Lesson, StageId, AttendanceRecord, StudentSubmission } from './types/lesson';
+import { INITIAL_CLASS_SUBMISSIONS } from './utils/grading';
 import { Navbar } from './components/Navbar';
 import { Grade5SubjectBar } from './components/Grade5SubjectBar';
 import { LessonGeneratorModal } from './components/LessonGeneratorModal';
@@ -21,35 +22,6 @@ const INITIAL_ATTENDANCE: AttendanceRecord[] = [
   { id: '8', studentName: 'Zilola Ergasheva', status: 'present' },
 ];
 
-const INITIAL_SUBMISSIONS: StudentSubmission[] = [
-  {
-    studentName: 'Madina Karimova',
-    practiceScore: 95,
-    assessmentScore: 100,
-    totalScore: 98,
-    reflectionAnswers: {
-      learned: 'Bir xil maxrajli kasrlarda surati kattasi katta bo‘lishini pissa misolida juda yaxshi tushundim.',
-      difficult: 'Suratlari bir xil bo‘lganda maxraji kichigini tanlash biroz o‘ylantirdi.',
-      understandingLevel: 5,
-      toReview: 'Bir xil suratli kasrlarni taqqoslash',
-    },
-    submittedAt: '10:42',
-  },
-  {
-    studentName: 'Jasur Aliyev',
-    practiceScore: 80,
-    assessmentScore: 85,
-    totalScore: 83,
-    reflectionAnswers: {
-      learned: 'Kasr chizig‘i bo‘lish amalini anglatishi va maxraj qismlar soni ekanini o‘rgandim.',
-      difficult: 'Sonlar o‘qida belgilash.',
-      understandingLevel: 4,
-      toReview: 'To‘g‘ri va noto‘g‘ri kasrlar',
-    },
-    submittedAt: '10:43',
-  },
-];
-
 export default function App() {
   const [role, setRole] = useState<'teacher' | 'student'>('teacher');
   const [lessons, setLessons] = useState<Lesson[]>(defaultLessons);
@@ -67,7 +39,7 @@ export default function App() {
 
   // Classroom data
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
-  const [submissions, setSubmissions] = useState<StudentSubmission[]>(INITIAL_SUBMISSIONS);
+  const [submissions, setSubmissions] = useState<StudentSubmission[]>(INITIAL_CLASS_SUBMISSIONS);
   const [studentName, setStudentName] = useState<string>('Azizbek Rashidov');
 
   const activeLesson = lessons.find((l) => l.id === activeLessonId) || lessons[0];
@@ -112,7 +84,17 @@ export default function App() {
   };
 
   const handleAddSubmission = (submission: StudentSubmission) => {
-    setSubmissions((prev) => [submission, ...prev]);
+    setSubmissions((prev) => {
+      const idx = prev.findIndex(
+        (s) => s.studentName.trim().toLowerCase() === submission.studentName.trim().toLowerCase()
+      );
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = submission;
+        return copy;
+      }
+      return [submission, ...prev];
+    });
   };
 
   return (
@@ -165,6 +147,7 @@ export default function App() {
             attendance={attendance}
             setAttendance={setAttendance}
             submissions={submissions}
+            setSubmissions={setSubmissions}
           />
         ) : (
           <StudentClassroom

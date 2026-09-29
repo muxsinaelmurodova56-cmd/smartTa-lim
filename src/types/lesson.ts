@@ -427,13 +427,39 @@ export interface AttendanceRecord {
   notes?: string;
 }
 
+export interface WorkBreakdownItem {
+  score: number;
+  max: number;
+  label: string;
+  statusText: string;
+}
+
+export interface WorkBreakdown {
+  attendance: WorkBreakdownItem;
+  motivation: WorkBreakdownItem;
+  theory: WorkBreakdownItem;
+  practice: WorkBreakdownItem;
+  reinforcement: WorkBreakdownItem;
+  assessment: WorkBreakdownItem;
+  reflection: WorkBreakdownItem;
+}
+
 export interface StudentSubmission {
+  id?: string;
   studentName: string;
   practiceScore: number;
   assessmentScore: number;
   totalScore: number;
+  finalGrade?: 5 | 4 | 3 | 2;
+  gradeLabel?: string;
+  gradeColor?: string;
+  gradeBadge?: string;
   completedAt?: string;
   submittedAt?: string;
+  breakdown?: WorkBreakdown;
+  aiFeedback?: string;
+  teacherOverrideGrade?: 5 | 4 | 3 | 2;
+  teacherNote?: string;
   reflectionAnswers: {
     learned: string;
     difficult: string;

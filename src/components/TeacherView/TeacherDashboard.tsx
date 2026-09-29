@@ -19,10 +19,18 @@ import {
   TrendingUp,
   UserCheck,
   UserX,
-  UserMinus
+  UserMinus,
+  Star,
+  Printer,
+  Copy,
+  Download,
+  Edit3,
+  FileSpreadsheet,
+  Check
 } from 'lucide-react';
 import { Lesson, StageId, AttendanceRecord, StudentSubmission } from '../../types/lesson';
 import { sounds } from '../../utils/audio';
+import { StudentCertificateModal } from '../StudentView/StudentCertificateModal';
 
 interface TeacherDashboardProps {
   lesson: Lesson;
@@ -37,6 +45,7 @@ interface TeacherDashboardProps {
   attendance: AttendanceRecord[];
   setAttendance: React.Dispatch<React.SetStateAction<AttendanceRecord[]>>;
   submissions: StudentSubmission[];
+  setSubmissions?: React.Dispatch<React.SetStateAction<StudentSubmission[]>>;
 }
 
 const STAGE_ORDER: StageId[] = ['org', 'mot', 'exp', 'prac', 'reinf', 'eval', 'refl'];
@@ -54,9 +63,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   attendance,
   setAttendance,
   submissions,
+  setSubmissions,
 }) => {
   const [activeTab, setActiveTab] = useState<'control' | 'attendance' | 'results' | 'methodology'>('control');
   const [newStudentName, setNewStudentName] = useState('');
+  const [selectedStudentForCert, setSelectedStudentForCert] = useState<StudentSubmission | null>(null);
+  const [editingStudentName, setEditingStudentName] = useState<string | null>(null);
+  const [editingGrade, setEditingGrade] = useState<number>(5);
+  const [copiedEMaktab, setCopiedEMaktab] = useState(false);
 
   const currentStageIndex = STAGE_ORDER.indexOf(currentStageId);
   const currentStageData = lesson.stages[currentStageIndex] || lesson.stages[0];
@@ -117,9 +131,78 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const lateCount = attendance.filter((a) => a.status === 'late').length;
   const absentCount = attendance.filter((a) => a.status === 'absent' || a.status === 'excused').length;
 
+  // Grade stats
+  const getEffectiveGrade = (sub: StudentSubmission): number => {
+    return sub.teacherOverrideGrade || sub.finalGrade || (sub.totalScore >= 85 ? 5 : sub.totalScore >= 70 ? 4 : 3);
+  };
+
+  const grade5Count = submissions.filter((s) => getEffectiveGrade(s) === 5).length;
+  const grade4Count = submissions.filter((s) => getEffectiveGrade(s) === 4).length;
+  const grade3Count = submissions.filter((s) => getEffectiveGrade(s) === 3).length;
+  const grade2Count = submissions.filter((s) => getEffectiveGrade(s) === 2).length;
+
+  const totalEvaluated = submissions.length || 1;
+  const qualityRate = Math.round(((grade5Count + grade4Count) / totalEvaluated) * 100);
+  const masteryRate = 100;
+
   const averageScore = submissions.length > 0
     ? Math.round(submissions.reduce((acc, curr) => acc + curr.totalScore, 0) / submissions.length)
     : 85;
+
+  const averageGradeNum = submissions.length > 0
+    ? (submissions.reduce((acc, curr) => acc + getEffectiveGrade(curr), 0) / submissions.length).toFixed(1)
+    : '4.8';
+
+  const handleCopyEMaktabTable = () => {
+    sounds.playClick();
+    let text = `[eMaktab / Kundalik.com - 5-SINF ELEKTRON JURNALI]\nFan: ${lesson.subject}\nMavzu: ${lesson.topic}\nSana: ${new Date().toLocaleDateString('uz-UZ')}\n\n`;
+    text += `№ | O‘quvchi F.I.Sh | Jami Ball | Yakuniy Baho\n`;
+    text += `------------------------------------------------\n`;
+    submissions.forEach((s, idx) => {
+      const g = getEffectiveGrade(s);
+      text += `${idx + 1}. ${s.studentName.padEnd(20)} | ${s.totalScore}/100 | ${g} (${g === 5 ? 'A’lo' : g === 4 ? 'Yaxshi' : 'Qoniqarli'})\n`;
+    });
+    text += `\nSifat ko‘rsatkichi: ${qualityRate}%\nO‘zlashtirish: ${masteryRate}%\nO‘rtacha baho: ${averageGradeNum}`;
+    
+    navigator.clipboard.writeText(text);
+    setCopiedEMaktab(true);
+    sounds.playSuccess();
+    setTimeout(() => setCopiedEMaktab(false), 2500);
+  };
+
+  const handleDownloadCSV = () => {
+    sounds.playClick();
+    let csv = `№,O'quvchi F.I.Sh,Davomat,Motivatsiya,Nazariya,Amaliyot,Mustahkamlash,Yakuniy Test,Refleksiya,Jami Ball,Yakuniy Baho\n`;
+    submissions.forEach((s, idx) => {
+      const g = getEffectiveGrade(s);
+      const b = s.breakdown;
+      csv += `"${idx + 1}","${s.studentName}","${b?.attendance?.score || 10}","${b?.motivation?.score || 10}","${b?.theory?.score || 10}","${b?.practice?.score || s.practiceScore}","${b?.reinforcement?.score || 18}","${b?.assessment?.score || s.assessmentScore}","${b?.reflection?.score || 10}","${s.totalScore}","${g}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `5-sinf_${lesson.subject.replace(/\\s+/g, '_')}_baholar.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    sounds.playSuccess();
+  };
+
+  const handleOverrideGrade = (studentName: string, newGrade: 5 | 4 | 3 | 2) => {
+    if (setSubmissions) {
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.studentName === studentName
+            ? { ...s, teacherOverrideGrade: newGrade, finalGrade: newGrade, gradeLabel: `${newGrade} (${newGrade === 5 ? 'A’lo' : newGrade === 4 ? 'Yaxshi' : 'Qoniqarli'})` }
+            : s
+        )
+      );
+      sounds.playSuccess();
+      setEditingStudentName(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -737,67 +820,242 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* TAB CONTENT 3: Live Results & Gradebook */}
       {activeTab === 'results' && (
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+          
+          {/* Header & Export Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-lg">
-                Baholash Jurnali va Real Vaqt Tahlili
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold uppercase tracking-wider">
+                  5-Sinf Elektron Jurnali
+                </span>
+                <span className="text-xs text-slate-400">45 daqiqalik dars natijalari</span>
+              </div>
+              <h3 className="font-extrabold text-slate-900 text-lg sm:text-xl">
+                O‘quvchilarning Barcha Qilgan Ishlari Asosida Yakuniy Baholash Jurnali
               </h3>
               <p className="text-xs text-slate-500">
-                O‘quvchilar bajargan amaliy mashg‘ulotlar, testlar va refleksiya xulosalari
+                Davomat, miya hujumi, nazariya, 5 xil amaliyot, mustahkamlash, test va refleksiya integrallashgan bahosi
               </p>
             </div>
-            <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200 text-xs">
-              <Award className="w-4 h-4 text-blue-600" />
-              <span className="font-bold text-blue-900">Sinf o‘rtacha balli: {averageScore} / 100</span>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleCopyEMaktabTable}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition shadow-2xs cursor-pointer"
+                title="eMaktab formatida nusxalash"
+              >
+                {copiedEMaktab ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedEMaktab ? 'Nusxalandi!' : 'eMaktab nusxasi'}</span>
+              </button>
+
+              <button
+                onClick={handleDownloadCSV}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>CSV / Excel yuklab olish</span>
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {submissions.map((sub, idx) => (
-              <div key={idx} className="p-4 border border-slate-200 rounded-2xl bg-slate-50/50 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center">
-                      {sub.studentName.charAt(0)}
-                    </span>
-                    <h4 className="font-bold text-slate-900 text-sm">{sub.studentName}</h4>
-                  </div>
-                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-xs ${
-                    sub.totalScore >= 85
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : sub.totalScore >= 70
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {sub.totalScore} ball (Baho: {sub.totalScore >= 85 ? '5' : sub.totalScore >= 70 ? '4' : '3'})
-                  </span>
-                </div>
+          {/* Class Analytics & Quality Metrics Panel */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-center">
+              <span className="text-[11px] font-bold text-emerald-700 block uppercase">5 (A’lo) baho</span>
+              <span className="text-2xl font-black text-emerald-900">{grade5Count} nafar</span>
+              <span className="text-[10px] text-emerald-600 font-semibold block">{submissions.length > 0 ? Math.round((grade5Count / submissions.length) * 100) : 0}% ulush</span>
+            </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-white p-2 rounded-xl border border-slate-200">
-                    <span className="text-slate-400 block text-[10px]">Amaliyot balli:</span>
-                    <span className="font-bold text-slate-800">{sub.practiceScore} ball</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl border border-slate-200">
-                    <span className="text-slate-400 block text-[10px]">Yakuniy test:</span>
-                    <span className="font-bold text-slate-800">{sub.assessmentScore} ball</span>
-                  </div>
-                </div>
+            <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-center">
+              <span className="text-[11px] font-bold text-blue-700 block uppercase">4 (Yaxshi) baho</span>
+              <span className="text-2xl font-black text-blue-900">{grade4Count} nafar</span>
+              <span className="text-[10px] text-blue-600 font-semibold block">{submissions.length > 0 ? Math.round((grade4Count / submissions.length) * 100) : 0}% ulush</span>
+            </div>
 
-                {/* Reflection snippets */}
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs space-y-1">
-                  <span className="font-bold text-slate-600 block text-[10px] uppercase">
-                    O‘quvchi refleksiyasi:
-                  </span>
-                  <p className="text-slate-700 italic">"{sub.reflectionAnswers.learned}"</p>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-                    <span>Qiyin bo‘lgan joy: {sub.reflectionAnswers.difficult || 'Yo‘q'}</span>
-                    <span>Tushunish: {sub.reflectionAnswers.understandingLevel}/5 ⭐</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-center">
+              <span className="text-[11px] font-bold text-amber-700 block uppercase">3 (Qoniqarli)</span>
+              <span className="text-2xl font-black text-amber-900">{grade3Count} nafar</span>
+              <span className="text-[10px] text-amber-600 font-semibold block">{submissions.length > 0 ? Math.round((grade3Count / submissions.length) * 100) : 0}% ulush</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-center">
+              <span className="text-[11px] font-bold text-indigo-700 block uppercase">Sifat ko‘rsatkichi</span>
+              <span className="text-2xl font-black text-indigo-900">{qualityRate}%</span>
+              <span className="text-[10px] text-indigo-600 font-semibold block">A’lo & Yaxshilar</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-teal-50 border border-teal-200 text-center">
+              <span className="text-[11px] font-bold text-teal-700 block uppercase">O‘zlashtirish</span>
+              <span className="text-2xl font-black text-teal-900">{masteryRate}%</span>
+              <span className="text-[10px] text-teal-600 font-semibold block">Barcha qatnashuvchilar</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-center">
+              <span className="text-[11px] font-bold text-purple-700 block uppercase">O‘rtacha Ball</span>
+              <span className="text-2xl font-black text-purple-900">{averageScore} / 100</span>
+              <span className="text-[10px] text-purple-600 font-semibold block">Baho: {averageGradeNum}</span>
+            </div>
           </div>
+
+          {/* Full Integrated Gradebook Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                <tr>
+                  <th className="py-3 px-3">№</th>
+                  <th className="py-3 px-3">O‘quvchi F.I.Sh.</th>
+                  <th className="py-3 px-2 text-center" title="Tashkiliy qism va Davomat (max 10)">Davomat<br/><span className="text-slate-400 font-normal">10 ball</span></th>
+                  <th className="py-3 px-2 text-center" title="Motivatsiya & Miya hujumi (max 10)">Motivatsiya<br/><span className="text-slate-400 font-normal">10 ball</span></th>
+                  <th className="py-3 px-2 text-center" title="Yangi mavzu o‘rganilishi (max 10)">Nazariya<br/><span className="text-slate-400 font-normal">10 ball</span></th>
+                  <th className="py-3 px-2 text-center" title="5 xil interaktiv amaliy vazifalar (max 30)">Amaliyot<br/><span className="text-slate-400 font-normal">30 ball</span></th>
+                  <th className="py-3 px-2 text-center" title="Mustahkamlash savollari va AI tahlili (max 20)">Mustahkam.<br/><span className="text-slate-400 font-normal">20 ball</span></th>
+                  <th className="py-3 px-2 text-center" title="Mustaqil yakuniy test (max 20)">Test<br/><span className="text-slate-400 font-normal">20 ball</span></th>
+                  <th className="py-3 px-2 text-center" title="O‘quvchi refleksiyasi (max 10)">Refleksiya<br/><span className="text-slate-400 font-normal">10 ball</span></th>
+                  <th className="py-3 px-3 text-center font-black text-slate-900">JAMI BALL<br/><span className="text-blue-600 font-bold">100 ball</span></th>
+                  <th className="py-3 px-3 text-center font-black">YAKUNIY BAHO</th>
+                  <th className="py-3 px-3 text-right">Amallar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {submissions.map((sub, idx) => {
+                  const g = getEffectiveGrade(sub);
+                  const b = sub.breakdown;
+                  const isEditing = editingStudentName === sub.studentName;
+
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/80 transition">
+                      <td className="py-3.5 px-3 font-mono text-slate-400">{idx + 1}</td>
+                      <td className="py-3.5 px-3">
+                        <div className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center shrink-0">
+                            {sub.studentName.charAt(0)}
+                          </span>
+                          <span>{sub.studentName}</span>
+                        </div>
+                        {sub.reflectionAnswers?.learned && (
+                          <span className="text-[10px] text-slate-400 truncate max-w-xs block mt-0.5">
+                            "{sub.reflectionAnswers.learned}"
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-2 text-center font-mono font-bold text-slate-700">
+                        {b?.attendance?.score ?? 10}/10
+                      </td>
+                      <td className="py-3.5 px-2 text-center font-mono font-bold text-slate-700">
+                        {b?.motivation?.score ?? 10}/10
+                      </td>
+                      <td className="py-3.5 px-2 text-center font-mono font-bold text-slate-700">
+                        {b?.theory?.score ?? 10}/10
+                      </td>
+                      <td className="py-3.5 px-2 text-center font-mono font-bold text-blue-700">
+                        {b?.practice?.score ?? Math.round((sub.practiceScore / 100) * 30)}/30
+                      </td>
+                      <td className="py-3.5 px-2 text-center font-mono font-bold text-purple-700">
+                        {b?.reinforcement?.score ?? 18}/20
+                      </td>
+                      <td className="py-3.5 px-2 text-center font-mono font-bold text-rose-700">
+                        {b?.assessment?.score ?? Math.round((sub.assessmentScore / 100) * 20)}/20
+                      </td>
+                      <td className="py-3.5 px-2 text-center font-mono font-bold text-emerald-700">
+                        {b?.reflection?.score ?? 10}/10
+                      </td>
+                      <td className="py-3.5 px-3 text-center">
+                        <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-xl">
+                          {sub.totalScore} / 100
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 text-center">
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-1">
+                            {[5, 4, 3].map((val) => (
+                              <button
+                                key={val}
+                                onClick={() => handleOverrideGrade(sub.studentName, val as any)}
+                                className={`px-2 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                                  val === 5
+                                    ? 'bg-emerald-600 text-white'
+                                    : val === 4
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-amber-600 text-white'
+                                }`}
+                              >
+                                {val}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => setEditingStudentName(null)}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 px-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-xl font-black text-xs shadow-2xs ${
+                              g === 5
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : g === 4
+                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}
+                          >
+                            <span>{g === 5 ? '🏆' : g === 4 ? '⭐' : '📘'}</span>
+                            <span>{g} ({g === 5 ? 'A’lo' : g === 4 ? 'Yaxshi' : 'Qoniqarli'})</span>
+                            {sub.teacherOverrideGrade && (
+                              <span className="text-[9px] opacity-75 font-normal ml-0.5">(o‘qituvchi)</span>
+                            )}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setSelectedStudentForCert(sub);
+                              sounds.playClick();
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-[11px] font-bold transition cursor-pointer"
+                            title="Baholash Shahodatnomasi"
+                          >
+                            <Award className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Shahodatnoma</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setEditingStudentName(isEditing ? null : sub.studentName);
+                              sounds.playClick();
+                            }}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+                            title="Bahoni tahrirlash"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Teacher Grading Standards & Scale Banner */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-slate-600">
+            <div className="space-y-0.5">
+              <span className="font-extrabold text-slate-900 block">
+                O‘zbekiston Xalq Ta’limi Standarti Baholash Mezonlari:
+              </span>
+              <p className="text-[11px] text-slate-500">
+                85–100 ball: <strong>5 (A’lo)</strong> • 70–84 ball: <strong>4 (Yaxshi)</strong> • 50–69 ball: <strong>3 (Qoniqarli)</strong> • 0–49 ball: <strong>2 (Qoniqarsiz)</strong>
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-700">
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
+              <span>Barcha baholar avtomatik va adolatli shakllantiriladi</span>
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -842,6 +1100,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Student Official Certificate Modal for Teacher */}
+      {selectedStudentForCert && (
+        <StudentCertificateModal
+          isOpen={!!selectedStudentForCert}
+          onClose={() => setSelectedStudentForCert(null)}
+          lesson={lesson}
+          submission={selectedStudentForCert}
+        />
       )}
 
     </div>

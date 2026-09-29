@@ -17,12 +17,14 @@ interface StageReinforcementProps {
   stageData: StageReinforcementData;
   onNext: () => void;
   onOpenAiTutor: () => void;
+  onUpdateScore?: (correctCount: number, totalCount: number) => void;
 }
 
 export const StageReinforcement: React.FC<StageReinforcementProps> = ({
   stageData,
   onNext,
   onOpenAiTutor,
+  onUpdateScore,
 }) => {
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
@@ -37,9 +39,21 @@ export const StageReinforcement: React.FC<StageReinforcementProps> = ({
   const handleSelectOption = (q: ReinforcementQuestion, optIdx: number) => {
     if (userAnswers[q.id] !== undefined) return;
 
-    setUserAnswers((prev) => ({ ...prev, [q.id]: optIdx }));
+    const newAnswers = { ...userAnswers, [q.id]: optIdx };
+    setUserAnswers(newAnswers);
     const expectedIdx = q.correctAnswerIndex ?? q.correctIndex ?? 0;
     const correct = optIdx === expectedIdx;
+
+    // Calculate total correct so far
+    let correctCount = 0;
+    stageData.questions.forEach((question) => {
+      const ans = newAnswers[question.id];
+      const corIdx = question.correctAnswerIndex ?? question.correctIndex ?? 0;
+      if (ans !== undefined && ans === corIdx) {
+        correctCount++;
+      }
+    });
+    onUpdateScore?.(correctCount, stageData.questions.length);
 
     if (correct) {
       sounds.playSuccess();

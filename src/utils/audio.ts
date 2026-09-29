@@ -138,6 +138,46 @@ class SoundManager {
     osc.start(now);
     osc.stop(now + 0.05);
   }
+
+  // Celebratory Fanfare for Grade 5 / 4 award
+  public playFanfare() {
+    if (!this.soundEnabled) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    // Fanfare sequence: C5 -> E5 -> G5 -> C6 (held)
+    const notes = [
+      { f: 523.25, time: 0, dur: 0.12 },
+      { f: 659.25, time: 0.12, dur: 0.12 },
+      { f: 783.99, time: 0.24, dur: 0.12 },
+      { f: 1046.5, time: 0.36, dur: 0.6 },
+    ];
+
+    notes.forEach((note) => {
+      const osc = ctx.createOscillator();
+      const oscHarmonic = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      oscHarmonic.type = 'sine';
+
+      osc.frequency.setValueAtTime(note.f, now + note.time);
+      oscHarmonic.frequency.setValueAtTime(note.f * 2, now + note.time);
+
+      gain.gain.setValueAtTime(0.2, now + note.time);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + note.time + note.dur);
+
+      osc.connect(gain);
+      oscHarmonic.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + note.time);
+      oscHarmonic.start(now + note.time);
+      osc.stop(now + note.time + note.dur + 0.05);
+      oscHarmonic.stop(now + note.time + note.dur + 0.05);
+    });
+  }
 }
 
 export const sounds = new SoundManager();

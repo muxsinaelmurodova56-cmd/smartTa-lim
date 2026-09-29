@@ -15,11 +15,15 @@ import { sounds, speakText } from '../../utils/audio';
 interface StageMotivationProps {
   stageData: StageMotivationData;
   onNext: () => void;
+  onHypothesisSaved?: () => void;
+  onWarmUpAnswered?: (isCorrect: boolean) => void;
 }
 
 export const StageMotivation: React.FC<StageMotivationProps> = ({
   stageData,
   onNext,
+  onHypothesisSaved,
+  onWarmUpAnswered,
 }) => {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isAnswerSubmitted, setIsAnswerSubmitted] = useState<boolean>(false);
@@ -31,7 +35,10 @@ export const StageMotivation: React.FC<StageMotivationProps> = ({
     setSelectedAnswer(index);
     setIsAnswerSubmitted(true);
 
-    if (index === stageData.warmUpQuiz.answerIndex) {
+    const isCorrect = index === stageData.warmUpQuiz.answerIndex;
+    onWarmUpAnswered?.(isCorrect);
+
+    if (isCorrect) {
       sounds.playSuccess();
     } else {
       sounds.playWrong();
@@ -42,6 +49,7 @@ export const StageMotivation: React.FC<StageMotivationProps> = ({
     e.preventDefault();
     if (!userHypothesis.trim()) return;
     setHypothesisSaved(true);
+    onHypothesisSaved?.();
     sounds.playSuccess();
   };
 
